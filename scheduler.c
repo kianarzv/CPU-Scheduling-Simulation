@@ -90,3 +90,80 @@ Metrics sjf_metrics(Process proc[], int n) {
     return m;
 }
 
+// Round Robin
+Metrics rr_metrics(Process proc[], int n, int timeQuantum) {
+    Process *p = malloc(n * sizeof(Process));
+    memcpy(p, proc, n * sizeof(Process));
+
+    int *remaining = malloc(n * sizeof(int));
+    int *start = malloc(n * sizeof(int));
+    int *started = calloc(n, sizeof(int));
+    int time = 0, completed = 0;
+    float totalTurnaround = 0, totalWaiting = 0, totalResponse = 0;
+
+    for (int i = 0; i < n; i++) {
+        remaining[i] = p[i].burstTime;
+        start[i] = -1;
+    }
+
+    int queue[100], front = 0, rear = 0;
+    int inQueue[n];
+    memset(inQueue, 0, sizeof(inQueue));
+
+    while (completed < n) {
+        // Enqueue arrived processes
+        for (int i = 0; i < n; i++) {
+            if (p[i].arrivalTime <= time && !inQueue[i] && remaining[i] > 0) {
+                queue[rear++] = i;
+                inQueue[i] = 1;
+            }
+        }
+
+        if (front == rear) {
+            time++;
+            continue;
+        }
+
+        int idx = queue[front++];
+        if (start[idx] == -1) {
+            start[idx] = time;
+            totalResponse += time - p[idx].arrivalTime;
+        }
+
+        int execTime = (remaining[idx] < timeQuantum) ? remaining[idx] : timeQuantum;
+        remaining[idx] -= execTime;
+        time += execTime;
+
+        // Enqueue newly arrived during execution
+        for (int i = 0; i < n; i++) {
+            if (p[i].arrivalTime > time - execTime && p[i].arrivalTime <= time && !inQueue[i] && remaining[i] > 0) {
+                queue[rear++] = i;
+                inQueue[i] = 1;
+            }
+        }
+
+        if (remaining[idx] > 0) {
+            queue[rear++] = idx;
+        } else {
+            int turnaround = time - p[idx].arrivalTime;
+            int waiting = turnaround - p[idx].burstTime;
+
+            totalTurnaround += turnaround;
+            totalWaiting += waiting;
+            completed++;
+        }
+        inQueue[idx] = 0;
+    }
+
+    free(p);
+    free(remaining);
+    free(start);
+    free(started);
+
+    Metrics m = {
+        totalTurnaround / n,
+        totalWaiting / n,
+        totalResponse / n
+    };
+    return m;
+}
