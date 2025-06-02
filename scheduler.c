@@ -96,45 +96,53 @@ Metrics rr_metrics(Process proc[], int n, int timeQuantum) {
     memcpy(p, proc, n * sizeof(Process));
 
     int *remaining = malloc(n * sizeof(int));
-    int *start = malloc(n * sizeof(int));
-    int *started = calloc(n, sizeof(int));
-    int time = 0, completed = 0;
-    float totalTurnaround = 0, totalWaiting = 0, totalResponse = 0;
+    int *startTime = malloc(n * sizeof(int));
+    int completed = 0;
+    int time = 0;
 
-    for (int i = 0; i < n; i++) {
-        remaining[i] = p[i].burstTime;
-        start[i] = -1;
-    }
-
-    int queue[100], front = 0, rear = 0;
+    int queue[100];
+    int front = 0, rear = 0;
     int inQueue[n];
     memset(inQueue, 0, sizeof(inQueue));
+    for (int i = 0; i < n; i++) {
+        remaining[i] = p[i].burstTime;
+        startTime[i] = -1;
+    }
+
+    // Enqueue first arrived processes
+    for (int i = 0; i < n; i++) {
+        if (p[i].arrivalTime == time) {
+            queue[rear++] = i;
+            inQueue[i] = 1;
+        }
+    }
+
+    float totalTurnaround = 0, totalWaiting = 0, totalResponse = 0;
 
     while (completed < n) {
-        // Enqueue arrived processes
-        for (int i = 0; i < n; i++) {
-            if (p[i].arrivalTime <= time && !inQueue[i] && remaining[i] > 0) {
-                queue[rear++] = i;
-                inQueue[i] = 1;
-            }
-        }
-
         if (front == rear) {
             time++;
+            // Check new arrivals
+            for (int i = 0; i < n; i++) {
+                if (p[i].arrivalTime == time && !inQueue[i] && remaining[i] > 0) {
+                    queue[rear++] = i;
+                    inQueue[i] = 1;
+                }
+            }
             continue;
         }
 
         int idx = queue[front++];
-        if (start[idx] == -1) {
-            start[idx] = time;
+        if (startTime[idx] == -1) {
+            startTime[idx] = time;
             totalResponse += time - p[idx].arrivalTime;
         }
 
-        int execTime = (remaining[idx] < timeQuantum) ? remaining[idx] : timeQuantum;
+        int execTime = remaining[idx] < timeQuantum ? remaining[idx] : timeQuantum;
         remaining[idx] -= execTime;
         time += execTime;
 
-        // Enqueue newly arrived during execution
+        // Add newly arrived during this execution
         for (int i = 0; i < n; i++) {
             if (p[i].arrivalTime > time - execTime && p[i].arrivalTime <= time && !inQueue[i] && remaining[i] > 0) {
                 queue[rear++] = i;
@@ -143,7 +151,7 @@ Metrics rr_metrics(Process proc[], int n, int timeQuantum) {
         }
 
         if (remaining[idx] > 0) {
-            queue[rear++] = idx;
+            queue[rear++] = idx; // Re-enqueue
         } else {
             int turnaround = time - p[idx].arrivalTime;
             int waiting = turnaround - p[idx].burstTime;
@@ -157,8 +165,7 @@ Metrics rr_metrics(Process proc[], int n, int timeQuantum) {
 
     free(p);
     free(remaining);
-    free(start);
-    free(started);
+    free(startTime);
 
     Metrics m = {
         totalTurnaround / n,
